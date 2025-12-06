@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCQ Sprint · 40 Questions</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="topbar">
+            <div class="brand">
+                <div class="accent-dot"></div>
+                <div>
+                    <p class="eyebrow">Mock exam</p>
+                    <h1>MCQ Sprint</h1>
+                </div>
+            </div>
+            <div class="top-actions">
+                <div class="stat">
+                    <span class="label">Remaining</span>
+                    <span class="value" id="timer">40:00</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Answered</span>
+                    <span class="value" id="answeredCount">0/40</span>
+                </div>
+                <div class="progress-shell" aria-label="Progress">
+                    <div class="progress" id="progressBar"></div>
+                </div>
+                <button class="primary" id="submitBtn">Submit</button>
+            </div>
+        </header>
+
+        <main class="layout">
+            <section class="question-panel">
+                <div class="question-meta">
+                    <span class="pill">Question <span id="questionNumber">1</span>/40</span>
+                </div>
+                <p class="question-text" id="questionText"></p>
+                <div class="option-list" id="optionsContainer"></div>
+                <div class="nav">
+                    <button class="ghost" id="prevBtn">Previous</button>
+                    <div class="nav-right">
+                        <button class="ghost" id="skipBtn">Skip</button>
+                        <button class="primary" id="nextBtn">Next</button>
+                    </div>
+                </div>
+                <div class="result-card" id="resultCard" hidden>
+                    <div>
+                        <p class="eyebrow">Submission saved</p>
+                        <h3 id="resultTitle">Progress snapshot</h3>
+                        <p class="muted" id="resultDetail"></p>
+                    </div>
+                    <button class="ghost" id="dismissResult">Dismiss</button>
+                </div>
+            </section>
+
+            <aside class="summary-panel">
+                <div class="summary-header">
+                    <div>
+                        <p class="eyebrow">Overview</p>
+                        <h3>Track every answer</h3>
+                    </div>
+                    <span class="chip" id="attemptedChip">0 attempted</span>
+                </div>
+                <div class="legend">
+                    <span class="legend-item current">Current</span>
+                    <span class="legend-item answered">Answered</span>
+                    <span class="legend-item pending">Pending</span>
+                    <span class="legend-item skipped">Skipped</span>
+                </div>
+                <div class="question-grid" id="questionGrid" aria-label="Question navigator"></div>
+            </aside>
+        </main>
+    </div>
+
+    <script>
+        const questions = Array.from({ length: 40 }, (_, i) => ({
+            id: i + 1,
+            text: `Question ${i + 1}: Choose the option that best fits this placeholder prompt.`,
+            options: [
+                `Option A for question ${i + 1}`,
+                `Option B for question ${i + 1}`,
+                `Option C for question ${i + 1}`,
+                `Option D for question ${i + 1}`
+            ]
+        }));
+
+        const state = {
+            current: 0,
+            answers: Array(questions.length).fill(null),
+            skipped: new Set(),
+            remainingSeconds: 40 * 60
+        };
+
+        const questionText = document.getElementById('questionText');
+        const questionNumber = document.getElementById('questionNumber');
+        const optionsContainer = document.getElementById('optionsContainer');
+        const questionGrid = document.getElementById('questionGrid');
+        const answeredCount = document.getElementById('answeredCount');
+        const progressBar = document.getElementById('progressBar');
+        const timer = document.getElementById('timer');
+        const attemptedChip = document.getElementById('attemptedChip');
+        const resultCard = document.getElementById('resultCard');
+        const resultTitle = document.getElementById('resultTitle');
+        const resultDetail = document.getElementById('resultDetail');
+
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const dismissResult = document.getElementById('dismissResult');
+
+        function renderQuestion() {
+            const question = questions[state.current];
+            questionNumber.textContent = question.id;
+            questionText.textContent = question.text;
+
+            optionsContainer.innerHTML = '';
+            question.options.forEach((option, idx) => {
+                const optionId = `q${question.id}_opt${idx}`;
+                const wrapper = document.createElement('label');
+                wrapper.className = 'option';
+
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = `question_${question.id}`;
+                input.id = optionId;
+                input.checked = state.answers[state.current] === idx;
+                input.addEventListener('change', () => {
+                    state.answers[state.current] = idx;
+                    state.skipped.delete(question.id);
+                    syncUI();
+                });
+
+                const custom = document.createElement('span');
+                custom.className = 'option-dot';
+
+                const text = document.createElement('span');
+                text.className = 'option-text';
+                text.textContent = option;
+
+                wrapper.appendChild(input);
+                wrapper.appendChild(custom);
+                wrapper.appendChild(text);
+                optionsContainer.appendChild(wrapper);
+            });
+
+            prevBtn.disabled = state.current === 0;
+            nextBtn.textContent = state.current === questions.length - 1 ? 'Finish' : 'Next';
+        }
+
+        function renderGrid() {
+            questionGrid.innerHTML = '';
+            questions.forEach((q, idx) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = q.id;
+                btn.className = 'grid-item';
+
+                if (state.current === idx) btn.classList.add('is-current');
+                if (state.answers[idx] !== null) btn.classList.add('is-answered');
+                if (state.skipped.has(q.id)) btn.classList.add('is-skipped');
+
+                btn.addEventListener('click', () => {
+                    state.current = idx;
+                    renderQuestion();
+                    renderGrid();
+                });
+
+                questionGrid.appendChild(btn);
+            });
+        }
+
+        function updateProgress() {
+            const answered = state.answers.filter((a) => a !== null).length;
+            answeredCount.textContent = `${answered}/${questions.length}`;
+            attemptedChip.textContent = `${answered} attempted`;
+            const pct = Math.round((answered / questions.length) * 100);
+            progressBar.style.width = `${pct}%`;
+        }
+
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${minutes}:${seconds}`;
+        }
+
+        function tickTimer() {
+            if (state.remainingSeconds <= 0) return;
+            state.remainingSeconds -= 1;
+            timer.textContent = formatTime(state.remainingSeconds);
+            if (state.remainingSeconds === 0) showResult('Time is up', 'Your time ran out. Review your selections before restarting.');
+        }
+
+        function showResult(title, detail) {
+            resultTitle.textContent = title;
+            resultDetail.textContent = detail;
+            resultCard.hidden = false;
+        }
+
+        function syncUI() {
+            renderQuestion();
+            renderGrid();
+            updateProgress();
+        }
+
+        prevBtn.addEventListener('click', () => {
+            if (state.current === 0) return;
+            state.current -= 1;
+            syncUI();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (state.current === questions.length - 1) {
+                showResult('Reached the end', 'You are at question 40. Submit when you are ready.');
+                return;
+            }
+            state.current += 1;
+            syncUI();
+        });
+
+        skipBtn.addEventListener('click', () => {
+            state.skipped.add(questions[state.current].id);
+            if (state.current < questions.length - 1) state.current += 1;
+            syncUI();
+        });
+
+        submitBtn.addEventListener('click', () => {
+            const answered = state.answers.filter((a) => a !== null).length;
+            const skipped = state.skipped.size;
+            showResult('Submission captured', `Answered ${answered} of ${questions.length}. Skipped ${skipped}.`);
+        });
+
+        dismissResult.addEventListener('click', () => {
+            resultCard.hidden = true;
+        });
+
+        renderQuestion();
+        renderGrid();
+        updateProgress();
+        timer.textContent = formatTime(state.remainingSeconds);
+        setInterval(tickTimer, 1000);
+    </script>
+</body>
+</html>
